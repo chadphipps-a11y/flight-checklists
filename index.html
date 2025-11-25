@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Flight Checklists</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.0/dist/tesseract.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .instructions {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+
+        .instructions h3 {
+            color: #1565C0;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .instructions ul {
+            margin-left: 20px;
+            color: #1565C0;
+            font-size: 14px;
+        }
+
+        .instructions li {
+            margin-bottom: 5px;
+        }
+
+        .scan-section {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .camera-input {
+            display: none;
+        }
+
+        .scan-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 18px 40px;
+            font-size: 18px;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            transition: transform 0.2s;
+            font-weight: 600;
+        }
+
+        .scan-button:active {
+            transform: scale(0.98);
+        }
+
+        .scan-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .preview-section {
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .preview-image {
+            max-width: 100%;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .processing {
+            background: #f0f4ff;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .saved-checklists-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+
+        .saved-title {
+            font-size: 20px;
+            color: #1e3c72;
+            margin-bottom: 15px;
+            font-weight: 700;
+        }
+
+        .saved-checklist-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 10px;
+            transition: transform 0.2s;
+        }
+
+        .saved-checklist-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .saved-checklist-info {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .saved-checklist-info strong {
+            font-size: 16px;
+            color: #333;
+        }
+
+        .item-count {
+            font-size: 13px;
+            color: #666;
+        }
+
+        .saved-checklist-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .load-btn, .delete-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .load-btn {
+            background: #667eea;
+            color: white;
+        }
+
+        .delete-btn {
+            background: #ff6b6b;
+            color: white;
+        }
+
+        .checklist-section {
+            margin-top: 30px;
+        }
+
+        .checklist-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .checklist-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1e3c72;
+        }
+
+        .reset-button {
+            background: #ff6b6b;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .checklist-items {
+            list-style: none;
+        }
+
+        .checklist-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            margin-bottom: 10px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .checklist-item:hover {
+            background: #e9ecef;
+        }
+
+        .checklist-item.checked {
+            background: #d4edda;
+            border-color: #28a745;
+        }
+
+        .checkbox {
+            width: 28px;
+            height: 28px;
+            border: 3px solid #667eea;
+            border-radius: 8px;
+            margin-right: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all 0.3s;
+        }
+
+        .checklist-item.checked .checkbox {
+            background: #28a745;
+            border-color: #28a745;
+        }
+
+        .checkbox::after {
+            content: '✓';
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+            display: none;
+        }
+
+        .checklist-item.checked .checkbox::after {
+            display: block;
+        }
+
+        .item-text {
+            flex: 1;
+            font-size: 16px;
+            color: #333;
+            line-height: 1.5;
+        }
+
+        .checklist-item.checked .item-text {
+            color: #155724;
+            font-weight: 500;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+
+        .empty-state h3 {
+            margin-bottom: 10px;
+        }
+
+        .new-checklist-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            margin-top: 15px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>✈️ Flight Checklists</h1>
+            <p>Cessna 172 Digital Checklist Scanner</p>
+        </div>
+
+        <div class="content">
+            <div class="instructions">
+                <h3>📋 How to Use:</h3>
+                <ul>
+                    <li>Tap "Scan Checklist" to photograph your paper checklist</li>
+                    <li>Name it (e.g., "Pre-flight", "Takeoff", "Landing")</li>
+                    <li>Tap items to check them off during flight</li>
+                    <li>Your checklists are saved permanently!</li>
+                    <li>Use "Scan Another" to add more checklists</li>
+                </ul>
+            </div>
+
+            <div id="savedChecklistsSection" class="saved-checklists-section" style="display: none;">
+                <h3 class="saved-title">📚 Your Saved Checklists</h3>
+                <div id="savedChecklistsList"></div>
+            </div>
+
+            <div class="scan-section">
+                <input type="file" id="cameraInput" class="camera-input" accept="image/*" capture="environment">
+                <button id="scanButton" class="scan-button">📷 Scan Checklist</button>
+            </div>
+
+            <div id="previewSection" class="preview-section" style="display: none;">
+                <img id="previewImage" class="preview-image" alt="Checklist preview">
+            </div>
+
+            <div id="processingSection" class="processing" style="display: none;">
+                <div class="spinner"></div>
+                <p><strong>Processing your checklist...</strong></p>
+                <p style="margin-top: 10px; font-size: 14px; color: #666;">This may take 10-20 seconds. Please wait.</p>
+            </div>
+
+            <div id="checklistSection" class="checklist-section" style="display: none;">
+                <div class="checklist-header">
+                    <h2 class="checklist-title">Your Checklist</h2>
+                    <button id="resetButton" class="reset-button">🔄 Reset</button>
+                </div>
+                <ul id="checklistItems" class="checklist-items"></ul>
+                <button id="newChecklistBtn" class="new-checklist-btn">➕ Scan Another Checklist</button>
+            </div>
+
+            <div id="emptyState" class="empty-state">
+                <h3>No checklist loaded</h3>
+                <p>Tap "Scan Checklist" to get started!</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const cameraInput = document.getElementById('cameraInput');
+        const scanButton = document.getElementById('scanButton');
+        const previewSection = document.getElementById('previewSection');
+        const previewImage = document.getElementById('previewImage');
+        const processingSection = document.getElementById('processingSection');
+        const checklistSection = document.getElementById('checklistSection');
+        const checklistItems = document.getElementById('checklistItems');
+        const emptyState = document.getElementById('emptyState');
+        const resetButton = document.getElementById('resetButton');
+        const newChecklistBtn = document.getElementById('newChecklistBtn');
+        const savedChecklistsSection = document.getElementById('savedChecklistsSection');
+        const savedChecklistsList = document.getElementById('savedChecklistsList');
+
+        let currentChecklist = [];
+        let savedChecklists = [];
+        let currentChecklistName = '';
+
+        // Load saved checklists from localStorage
+        try {
+            const saved = localStorage.getItem('flightChecklists');
+            if (saved) {
+                savedChecklists = JSON.parse(saved);
+                if (savedChecklists.length > 0) {
+                    displaySavedChecklists();
+                }
+            }
+        } catch (e) {
+            console.log('localStorage not available, using session storage');
+        }
+
+        scanButton.addEventListener('click', () => {
+            cameraInput.click();
+        });
+
+        newChecklistBtn.addEventListener('click', () => {
+            cameraInput.click();
+        });
+
+        cameraInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                previewImage.src = e.target.result;
+                previewSection.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+
+            emptyState.style.display = 'none';
+            checklistSection.style.display = 'none';
+            processingSection.style.display = 'block';
+            scanButton.disabled = true;
+
+            try {
+                const result = await Tesseract.recognize(file, 'eng', {
+                    logger: m => console.log(m)
+                });
+
+                const text = result.data.text;
+                console.log('Extracted text:', text);
+                const items = parseChecklistItems(text);
+                
+                if (items.length > 0) {
+                    const checklistName = prompt('Name this checklist (e.g., "Pre-flight", "Takeoff"):', '');
+                    
+                    if (checklistName && checklistName.trim()) {
+                        currentChecklistName = checklistName.trim();
+                        currentChecklist = items.map(item => ({
+                            text: item,
+                            checked: false
+                        }));
+                        
+                        // Save to storage
+                        const checklistData = {
+                            name: currentChecklistName,
+                            items: items,
+                            dateAdded: new Date().toISOString()
+                        };
+                        savedChecklists.push(checklistData);
+                        saveToStorage();
+                        
+                        displayChecklist();
+                        displaySavedChecklists();
+                    } else {
+                        alert('Please provide a name for the checklist.');
+                        emptyState.style.display = 'block';
+                    }
+                } else {
+                    alert('No checklist items found. Please try again with a clearer image.');
+                    emptyState.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('OCR Error:', error);
+                alert('Error processing image. Please try again.');
+                emptyState.style.display = 'block';
+            } finally {
+                processingSection.style.display = 'none';
+                scanButton.disabled = false;
+                cameraInput.value = '';
+            }
+        });
+
+        function parseChecklistItems(text) {
+            const lines = text.split('\n')
+                .map(line => line.trim())
+                .filter(line => line.length > 2);
+
+            const items = [];
+            
+            for (let line of lines) {
+                // Skip very short lines or all-caps headers
+                if (line.length < 3 || (line === line.toUpperCase() && line.length < 15)) {
+                    continue;
+                }
+                
+                // Clean up
+                line = line.replace(/[|]/g, '').trim();
+                
+                if (line.length >= 3) {
+                    items.push(line);
+                }
+            }
+
+            return items;
+        }
+
+        function saveToStorage() {
+            try {
+                localStorage.setItem('flightChecklists', JSON.stringify(savedChecklists));
+            } catch (e) {
+                console.log('Could not save to localStorage');
+            }
+        }
+
+        function displayChecklist() {
+            checklistItems.innerHTML = '';
+            checklistSection.style.display = 'block';
+            emptyState.style.display = 'none';
+            
+            document.querySelector('.checklist-title').textContent = currentChecklistName;
+
+            currentChecklist.forEach((item, index) => {
+                const li = document.createElement('li');
+                li.className = 'checklist-item' + (item.checked ? ' checked' : '');
+                li.innerHTML = `
+                    <div class="checkbox"></div>
+                    <div class="item-text">${item.text}</div>
+                `;
+                
+                li.addEventListener('click', () => {
+                    currentChecklist[index].checked = !currentChecklist[index].checked;
+                    li.classList.toggle('checked');
+                });
+
+                checklistItems.appendChild(li);
+            });
+        }
+
+        function displaySavedChecklists() {
+            if (savedChecklists.length === 0) {
+                savedChecklistsSection.style.display = 'none';
+                return;
+            }
+
+            savedChecklistsSection.style.display = 'block';
+            savedChecklistsList.innerHTML = '';
+            
+            savedChecklists.forEach((checklist, index) => {
+                const card = document.createElement('div');
+                card.className = 'saved-checklist-card';
+                card.innerHTML = `
+                    <div class="saved-checklist-info">
+                        <strong>${checklist.name}</strong>
+                        <span class="item-count">${checklist.items.length} items</span>
+                    </div>
+                    <div class="saved-checklist-actions">
+                        <button class="load-btn" onclick="loadChecklist(${index})">Load</button>
+                        <button class="delete-btn" onclick="deleteChecklist(${index})">Delete</button>
+                    </div>
+                `;
+                savedChecklistsList.appendChild(card);
+            });
+        }
+
+        window.loadChecklist = function(index) {
+            const checklist = savedChecklists[index];
+            currentChecklistName = checklist.name;
+            currentChecklist = checklist.items.map(item => ({
+                text: item,
+                checked: false
+            }));
+            displayChecklist();
+        };
+
+        window.deleteChecklist = function(index) {
+            const checklist = savedChecklists[index];
+            if (confirm(`Delete "${checklist.name}"? This cannot be undone.`)) {
+                savedChecklists.splice(index, 1);
+                saveToStorage();
+                displaySavedChecklists();
+                
+                if (currentChecklistName === checklist.name) {
+                    emptyState.style.display = 'block';
+                    checklistSection.style.display = 'none';
+                }
+            }
+        };
+
+        resetButton.addEventListener('click', () => {
+            if (confirm('Reset all checklist items?')) {
+                currentChecklist.forEach(item => item.checked = false);
+                displayChecklist();
+            }
+        });
+
+        // Initialize
+        emptyState.style.display = 'block';
+    </script>
+</body>
+</html>
