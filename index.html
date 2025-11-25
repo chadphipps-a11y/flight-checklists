@@ -439,93 +439,119 @@
 
         // Helper function: Parse checklist items
         function parseChecklistItems(text) {
-            const lines = text.split('\n')
-                .map(line => line.trim())
-                .filter(line => line.length > 0);
-
-            const skipExact = [
-                'TAKEOFF', 'LANDING', 'NORMAL TAKEOFF', 'NORMAL LANDING',
-                'SHORT FIELD TAKEOFF', 'SHORT FIELD LANDING', 
-                'SOFT FIELD TAKEOFF', 'SOFT FIELD LANDING',
-                'BALKED LANDING (GO-AROUND)', 'BALKED LANDING', '(GO-AROUND)',
-                'Cessna 172R Normal Procedures Revision 1'
-            ];
+            // Remove ALL line breaks and normalize whitespace
+            const rawText = text.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
             
             const items = [];
-            let i = 0;
             
-            while (i < lines.length) {
-                let line = lines[i].replace(/[|]/g, '').trim();
+            // Pattern: Look for checklist item format
+            // [Item name]...[Action/Value]
+            // Examples:
+            // "Wing Flaps...SET 0°-10°"
+            // "Throttle...FULL OPEN"
+            // "Mixture...RICH/LEAN abv 3000ft for max RPM"
+            
+            // Common item names to look for
+            const itemPatterns = [
+                // First, try to find complete items with dots
+                /([A-Z][A-Za-z\s]{2,25}?)\.{2,}([A-Z][A-Za-z0-9°\s\/\-]{2,60}?)(?=\s+[A-Z][a-z]{2,}\.{2,}|\s+[A-Z]{2,}\s|$)/g,
                 
-                // Skip headers
-                if (skipExact.includes(line)) {
-                    i++;
-                    continue;
-                }
+                // Items without dots but with clear format "Item...ACTION"
+                /([A-Z][A-Za-z\s]{2,20}?)\s+(SET|FULL|OPEN|CLOSE|CHECK|APPLY|RELEASE|LOWER|LIFT|RAISE|MAINTAIN|REDUCE|AS|AVOID|SLOWLY|RETRACT|HOLD|KEEP|MINIMUM|MAXIMUM|UNTIL|REMAIN)\s+[A-Z0-9°\-\s]{2,50}?(?=\s+[A-Z][a-z]{2,}\s|$)/gi,
                 
-                // Skip very short or just numbers
-                if (line.length < 2 || line.match(/^[\d\.\s]+$/)) {
-                    i++;
-                    continue;
-                }
-                
-                // BRUTE FORCE: If line is short (< 25 chars) OR ends with dots/periods,
-                // merge with next lines until we have something substantial
-                let mergedLine = line;
-                let j = i + 1;
-                
-                while (j < lines.length && 
-                       (mergedLine.length < 25 || mergedLine.match(/[\.\s]+$/))) {
+                // Items with specific aviation terms
+                /([A-Z][A-Za-z\s]{2,20}?)\s+(\d+[\-–]\d+\s+KIAS|AS DESIRED|AS REQUIRED|MAIN GEAR FIRST|LOWER NOSE GENTLY|SLIGHTLY TAIL LOW|MINIMUM REQUIRED)/gi
+            ];
+            
+            // Try each pattern
+            for (let pattern of itemPatterns) {
+                let match;
+                while ((match = pattern.exec(rawText)) !== null) {
+                    let item = match[0].trim();
                     
-                    let nextLine = lines[j].replace(/[|]/g, '').trim();
+                    // Clean up
+                    item = item
+                        .replace(/\.{5,}/g, '...')
+                        .replace(/\s+/g, ' ')
+                        .trim();
                     
-                    // Stop if next line is a header
-                    if (skipExact.includes(nextLine)) {
-                        break;
+                    // Must be substantial
+                    if (item.length > 10 && !items.includes(item)) {
+                        items.push(item);
                     }
+                }
+                // Reset regex
+                pattern.lastIndex = 0;
+            }
+            
+            // If pattern matching didn't work well, fall back to line-by-line
+            if (items.length < 5) {
+                items.length = 0; // Clear
+                
+                // Split by newlines again
+                const lines = text.split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line.length > 0);
+                
+                const skipExact = [
+                    'TAKEOFF', 'LANDING', 'NORMAL TAKEOFF', 'NORMAL LANDING',
+                    'SHORT FIELD TAKEOFF', 'SHORT FIELD LANDING', 
+                    'SOFT FIELD TAKEOFF', 'SOFT FIELD LANDING',
+                    'BALKED LANDING (GO-AROUND)', 'BALKED LANDING', '(GO-AROUND)'
+                ];
+                
+                let i = 0;
+                while (i < lines.length) {
+                    let line = lines[i].replace(/[|]/g, '').trim();
                     
-                    // Stop if next line is too short (likely junk)
-                    if (nextLine.length < 2) {
-                        j++;
+                    // Skip headers
+                    if (skipExact.includes(line)) {
+                        i++;
                         continue;
                     }
                     
-                    // Stop if next line clearly starts a new checklist item
-                    // (starts with common item names AND current line seems complete)
-                    if (mergedLine.length > 20 && 
-                        nextLine.match(/^(Wing Flaps?|Throttle|Mixture|Airspeed|Elevator|Climb|Brakes?|Fuel|Oil|Engine|Gear|Lights?|Power|Liftoff|Touchdown|Landing Roll)/i)) {
-                        break;
+                    // Skip very short
+                    if (line.length < 3) {
+                        i++;
+                        continue;
                     }
                     
-                    // Add space if needed
-                    if (!mergedLine.endsWith(' ') && !mergedLine.endsWith('.') && 
-                        !nextLine.startsWith('.')) {
-                        mergedLine += ' ';
+                    // Merge short lines aggressively
+                    let mergedLine = line;
+                    let j = i + 1;
+                    
+                    while (j < lines.length && mergedLine.length < 30) {
+                        let nextLine = lines[j].replace(/[|]/g, '').trim();
+                        
+                        if (skipExact.includes(nextLine) || nextLine.length < 2) {
+                            j++;
+                            continue;
+                        }
+                        
+                        // Stop if next line starts a new item
+                        if (mergedLine.length > 15 && 
+                            nextLine.match(/^(Wing Flaps?|Throttle|Mixture|Airspeed|Elevator|Climb|Brakes?|Fuel|Engine|Gear|Liftoff|Touchdown|Landing Roll|Power)/i)) {
+                            break;
+                        }
+                        
+                        if (!mergedLine.endsWith(' ')) mergedLine += ' ';
+                        mergedLine += nextLine;
+                        j++;
+                        
+                        if (mergedLine.length > 50) break;
                     }
                     
-                    mergedLine += nextLine;
-                    j++;
+                    mergedLine = mergedLine
+                        .replace(/\.{5,}/g, '...')
+                        .replace(/\s+/g, ' ')
+                        .trim();
                     
-                    // If we've merged enough, stop
-                    if (mergedLine.length > 40 && !mergedLine.match(/[\.\s]+$/)) {
-                        break;
+                    if (mergedLine.length > 5) {
+                        items.push(mergedLine);
                     }
+                    
+                    i = j;
                 }
-                
-                // Clean up the merged line
-                mergedLine = mergedLine
-                    .replace(/\.{5,}/g, '...')
-                    .replace(/\s+/g, ' ')
-                    .trim();
-                
-                // Only add if it has substance
-                if (mergedLine.length > 4 && 
-                    !mergedLine.match(/^[\.\s]+$/) &&
-                    !skipExact.includes(mergedLine)) {
-                    items.push(mergedLine);
-                }
-                
-                i = j;
             }
             
             return items;
