@@ -447,89 +447,88 @@
                 'TAKEOFF', 'LANDING', 'NORMAL TAKEOFF', 'NORMAL LANDING',
                 'SHORT FIELD TAKEOFF', 'SHORT FIELD LANDING', 
                 'SOFT FIELD TAKEOFF', 'SOFT FIELD LANDING',
-                'BALKED LANDING (GO-AROUND)', 'BALKED LANDING', '(GO-AROUND)'
-            ];
-            
-            // Common checklist item starters
-            const itemStarters = [
-                'Wing Flaps', 'Wing Flap', 'Flaps', 'Throttle', 'Mixture', 'Airspeed',
-                'Elevator Control', 'Elevator', 'Climb Speed', 'Climb', 'Brakes', 'Brake',
-                'Fuel', 'Oil', 'Engine', 'Power', 'Gear', 'Landing Gear', 'Nose Gear',
-                'Lights', 'Light', 'Switches', 'Radios', 'Altimeter',
-                'Touchdown', 'Landing Roll', 'Takeoff', 'Liftoff', 'Flare'
+                'BALKED LANDING (GO-AROUND)', 'BALKED LANDING', '(GO-AROUND)',
+                'Cessna 172R Normal Procedures Revision 1'
             ];
             
             const items = [];
-            let currentItem = null;
+            let i = 0;
             
-            for (let i = 0; i < lines.length; i++) {
+            while (i < lines.length) {
                 let line = lines[i].replace(/[|]/g, '').trim();
                 
                 // Skip headers
-                if (skipExact.includes(line.toUpperCase())) {
+                if (skipExact.includes(line)) {
+                    i++;
                     continue;
                 }
                 
                 // Skip very short or just numbers
                 if (line.length < 2 || line.match(/^[\d\.\s]+$/)) {
+                    i++;
                     continue;
                 }
                 
-                // Check if this line starts a new checklist item
-                let startsNewItem = false;
-                for (let starter of itemStarters) {
-                    if (line.startsWith(starter)) {
-                        startsNewItem = true;
+                // BRUTE FORCE: If line is short (< 25 chars) OR ends with dots/periods,
+                // merge with next lines until we have something substantial
+                let mergedLine = line;
+                let j = i + 1;
+                
+                while (j < lines.length && 
+                       (mergedLine.length < 25 || mergedLine.match(/[\.\s]+$/))) {
+                    
+                    let nextLine = lines[j].replace(/[|]/g, '').trim();
+                    
+                    // Stop if next line is a header
+                    if (skipExact.includes(nextLine)) {
+                        break;
+                    }
+                    
+                    // Stop if next line is too short (likely junk)
+                    if (nextLine.length < 2) {
+                        j++;
+                        continue;
+                    }
+                    
+                    // Stop if next line clearly starts a new checklist item
+                    // (starts with common item names AND current line seems complete)
+                    if (mergedLine.length > 20 && 
+                        nextLine.match(/^(Wing Flaps?|Throttle|Mixture|Airspeed|Elevator|Climb|Brakes?|Fuel|Oil|Engine|Gear|Lights?|Power|Liftoff|Touchdown|Landing Roll)/i)) {
+                        break;
+                    }
+                    
+                    // Add space if needed
+                    if (!mergedLine.endsWith(' ') && !mergedLine.endsWith('.') && 
+                        !nextLine.startsWith('.')) {
+                        mergedLine += ' ';
+                    }
+                    
+                    mergedLine += nextLine;
+                    j++;
+                    
+                    // If we've merged enough, stop
+                    if (mergedLine.length > 40 && !mergedLine.match(/[\.\s]+$/)) {
                         break;
                     }
                 }
                 
-                if (startsNewItem) {
-                    // Save previous item if exists
-                    if (currentItem && currentItem.length > 5) {
-                        items.push(currentItem.trim());
-                    }
-                    // Start new item
-                    currentItem = line;
-                } else {
-                    // This might be a continuation (action part)
-                    // Lines starting with dots, or all caps words, or numbers+KIAS
-                    if (line.match(/^[\.\s]*(SET|FULL|OPEN|CLOSED|CHECK|APPLY|RELEASE|AS|LOWER|LIFT|RAISE|RETRACT|MAINTAIN|REDUCE|HOLD|KEEP|MINIMUM|MAXIMUM)/i) ||
-                        line.match(/^[\.\s]*\d/) ||
-                        line.match(/KIAS|RPM|FT|FEET|°|FIRST|GENTLY|REQUIRED|DESIRED/i)) {
-                        
-                        if (currentItem) {
-                            // Add to current item
-                            if (!currentItem.endsWith(' ') && !line.startsWith('.')) {
-                                currentItem += ' ';
-                            }
-                            currentItem += line;
-                        } else {
-                            // Orphan action line - keep it anyway
-                            items.push(line);
-                        }
-                    } else {
-                        // Doesn't match our patterns - might be new item we didn't catch
-                        if (currentItem && currentItem.length > 5) {
-                            items.push(currentItem.trim());
-                        }
-                        currentItem = line;
-                    }
+                // Clean up the merged line
+                mergedLine = mergedLine
+                    .replace(/\.{5,}/g, '...')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+                
+                // Only add if it has substance
+                if (mergedLine.length > 4 && 
+                    !mergedLine.match(/^[\.\s]+$/) &&
+                    !skipExact.includes(mergedLine)) {
+                    items.push(mergedLine);
                 }
+                
+                i = j;
             }
             
-            // Don't forget the last item
-            if (currentItem && currentItem.length > 5) {
-                items.push(currentItem.trim());
-            }
-            
-            // Clean up items
-            return items.map(item => item.replace(/\.{5,}/g, '...')).filter(item => {
-                // Final filter - must have substance
-                return item.length > 4 && 
-                       !item.match(/^[\.\s]+$/) &&
-                       !skipExact.includes(item.toUpperCase());
-            });
+            return items;
         }
 
         // Load saved checklists from localStorage
