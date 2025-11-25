@@ -492,46 +492,63 @@
         // Helper: Parse checklist items
         function parseChecklistItems(text) {
             debug('Parsing text...');
+            debug('First 500 chars: ' + text.substring(0, 500));
+            
             const lines = text.split('\n')
                 .map(line => line.trim())
                 .filter(line => line.length > 0);
+
+            debug('Total lines found: ' + lines.length);
 
             const skipExact = [
                 'TAKEOFF', 'LANDING', 'NORMAL TAKEOFF', 'NORMAL LANDING',
                 'SHORT FIELD TAKEOFF', 'SHORT FIELD LANDING', 
                 'SOFT FIELD TAKEOFF', 'SOFT FIELD LANDING',
-                'BALKED LANDING', 'GO-AROUND'
+                'BALKED LANDING', 'GO-AROUND', 'BALKED LANDING (GO-AROUND)'
             ];
             
             const items = [];
-            let i = 0;
             
-            while (i < lines.length) {
-                let line = lines[i].trim();
-                
+            for (let line of lines) {
                 // Skip headers
-                if (skipExact.includes(line.toUpperCase())) {
-                    i++;
+                if (skipExact.includes(line.toUpperCase().trim())) {
+                    debug('Skipping header: ' + line);
                     continue;
                 }
                 
-                // Skip very short
-                if (line.length < 5) {
-                    i++;
+                // Skip very short lines
+                if (line.length < 8) {
+                    debug('Skipping short line: ' + line);
                     continue;
                 }
                 
-                // Look for checklist patterns
-                if (line.match(/(Wing|Flap|Throttle|Mixture|Airspeed|Elevator|Gear|Brake|Fuel|Engine|Power|Climb|Landing|Takeoff|Touchdown)/i) ||
-                    line.match(/\d+\s*(KIAS|RPM|FT|°)/i) ||
-                    line.match(/(SET|FULL|OPEN|CHECK|APPLY|RELEASE|LOWER|LIFT|RAISE|MAINTAIN)/i)) {
+                // Accept ANY line that contains dots followed by text (checklist format)
+                // OR contains aviation keywords
+                // OR contains values like "KIAS", "RPM", etc.
+                if (line.includes('...') ||
+                    line.includes('..') ||
+                    line.match(/\.\.\./)) {
                     items.push(line);
+                    debug('Added (dots): ' + line);
                 }
-                
-                i++;
+                else if (line.match(/(Wing|Flap|Throttle|Mixture|Airspeed|Elevator|Gear|Brake|Fuel|Engine|Power|Climb|Landing|Takeoff|Touchdown|Nose|Speed|Roll)/i)) {
+                    items.push(line);
+                    debug('Added (aviation term): ' + line);
+                }
+                else if (line.match(/\d+.*KIAS|RPM|°|FT|FEET/i)) {
+                    items.push(line);
+                    debug('Added (value): ' + line);
+                }
+                else if (line.match(/(SET|FULL|OPEN|CHECK|APPLY|RELEASE|LOWER|LIFT|RAISE|MAINTAIN|REDUCE|RETRACT|AVOID|SLOWLY|REMAIN|CLEARED|DESIRED|REQUIRED|FIRST|GENTLY)/i)) {
+                    items.push(line);
+                    debug('Added (action): ' + line);
+                }
+                else {
+                    debug('Skipped: ' + line);
+                }
             }
             
-            debug('Items parsed: ' + items.length);
+            debug('Total items parsed: ' + items.length);
             return items;
         }
 
