@@ -329,6 +329,15 @@
             margin-top: 15px;
             width: 100%;
         }
+
+        .debug-info {
+            background: #fff3cd;
+            padding: 10px;
+            margin-top: 20px;
+            border-radius: 5px;
+            font-size: 12px;
+            font-family: monospace;
+        }
     </style>
 </head>
 <body>
@@ -358,6 +367,7 @@
             <div class="scan-section">
                 <input type="file" id="cameraInput" class="camera-input" accept="image/*" capture="environment">
                 <button id="scanButton" class="scan-button">📷 Scan Checklist</button>
+                <div id="debugInfo" class="debug-info" style="display:none;"></div>
             </div>
 
             <div id="previewSection" class="preview-section" style="display: none;">
@@ -387,10 +397,10 @@
     </div>
 
     <script>
-        // *** PASTE YOUR GOOGLE CLOUD VISION API KEY HERE ***
+        // Configuration
         const GOOGLE_API_KEY = 'AIzaSyDe4UzT8RJ7205RvyBTVwlZYEuIxwlENTg';
-        // *** REPLACE 'YOUR_API_KEY_HERE' WITH YOUR ACTUAL KEY ***
 
+        // DOM elements
         const cameraInput = document.getElementById('cameraInput');
         const scanButton = document.getElementById('scanButton');
         const previewSection = document.getElementById('previewSection');
@@ -403,10 +413,50 @@
         const newChecklistBtn = document.getElementById('newChecklistBtn');
         const savedChecklistsSection = document.getElementById('savedChecklistsSection');
         const savedChecklistsList = document.getElementById('savedChecklistsList');
+        const debugInfo = document.getElementById('debugInfo');
 
+        // State
         let currentChecklist = [];
         let savedChecklists = [];
         let currentChecklistName = '';
+
+        // Debug function
+        function debug(message) {
+            console.log(message);
+            debugInfo.style.display = 'block';
+            debugInfo.textContent += message + '\n';
+        }
+
+        // Helper function: Convert file to base64
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // Helper function: Parse checklist items
+        function parseChecklistItems(text) {
+            const lines = text.split('\n')
+                .map(line => line.trim())
+                .filter(line => line.length > 2);
+
+            const items = [];
+            
+            for (let line of lines) {
+                if (line.length < 3 || (line === line.toUpperCase() && line.length < 15)) {
+                    continue;
+                }
+                line = line.replace(/[|]/g, '').trim();
+                if (line.length >= 3) {
+                    items.push(line);
+                }
+            }
+
+            return items;
+        }
 
         // Load saved checklists from localStorage
         try {
@@ -418,37 +468,56 @@
                 }
             }
         } catch (e) {
-            console.log('localStorage not available, using session storage');
+            debug('localStorage not available');
         }
 
-        scanButton.addEventListener('click', () => {
+        // Button click handlers
+        scanButton.addEventListener('click', function() {
+            debug('Scan button clicked');
             cameraInput.click();
         });
 
-        newChecklistBtn.addEventListener('click', () => {
+        newChecklistBtn.addEventListener('click', function() {
+            debug('New checklist button clicked');
             cameraInput.click();
         });
 
-        cameraInput.addEventListener('change', async (e) => {
+        // Camera input change handler
+        cameraInput.addEventListener('change', async function(e) {
+            debug('File selected');
             const file = e.target.files[0];
-            if (!file) return;
+            if (!file) {
+                debug('No file selected');
+                return;
+            }
 
+            debug('File type: ' + file.type);
+            debug('File size: ' + file.size);
+
+            // Show preview
             const reader = new FileReader();
-            reader.onload = (e) => {
+            reader.onload = function(e) {
                 previewImage.src = e.target.result;
                 previewSection.style.display = 'block';
+                debug('Preview loaded');
             };
             reader.readAsDataURL(file);
 
+            // Hide other sections
             emptyState.style.display = 'none';
             checklistSection.style.display = 'none';
             processingSection.style.display = 'block';
             scanButton.disabled = true;
 
             try {
-                // Convert image to base64
+                debug('Starting OCR...');
+                
+                // Convert to base64
                 const base64Image = await fileToBase64(file);
-                const base64Content = base64Image.split(',')[1]; // Remove data URL prefix
+                const base64Content = base64Image.split(',')[1];
+                
+                debug('Image converted to base64');
+                debug('API Key present: ' + (GOOGLE_API_KEY !== 'YOUR_API_KEY_HERE'));
 
                 // Call Google Cloud Vision API
                 const response = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${GOOGLE_API_KEY}`, {
@@ -469,12 +538,17 @@
                     })
                 });
 
+                debug('API response status: ' + response.status);
+
                 const data = await response.json();
+                debug('API response received');
                 
                 if (data.responses && data.responses[0].textAnnotations) {
                     const text = data.responses[0].textAnnotations[0].description;
-                    console.log('Extracted text:', text);
+                    debug('Text extracted, length: ' + text.length);
+                    
                     const items = parseChecklistItems(text);
+                    debug('Items parsed: ' + items.length);
                     
                     if (items.length > 0) {
                         const checklistName = prompt('Name this checklist (e.g., "Pre-flight", "Takeoff"):', '');
@@ -486,7 +560,6 @@
                                 checked: false
                             }));
                             
-                            // Save to storage
                             const checklistData = {
                                 name: currentChecklistName,
                                 items: items,
@@ -505,13 +578,18 @@
                         alert('No checklist items found. Please try again with a clearer image.');
                         emptyState.style.display = 'block';
                     }
+                } else if (data.error) {
+                    debug('API Error: ' + JSON.stringify(data.error));
+                    alert('API Error: ' + data.error.message);
+                    emptyState.style.display = 'block';
                 } else {
-                    alert('Could not extract text from image. Please try again.');
+                    alert('Could not extract text from image.');
                     emptyState.style.display = 'block';
                 }
             } catch (error) {
+                debug('Error: ' + error.message);
                 console.error('OCR Error:', error);
-                alert('Error processing image. Make sure your API key is set correctly.');
+                alert('Error: ' + error.message);
                 emptyState.style.display = 'block';
             } finally {
                 processingSection.style.display = 'none';
@@ -520,46 +598,11 @@
             }
         });
 
-        function parseChecklistItems(text) {
-
-        function fileToBase64(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
-        }
-
-        function parseChecklistItems(text) {
-            const lines = text.split('\n')
-                .map(line => line.trim())
-                .filter(line => line.length > 2);
-
-            const items = [];
-            
-            for (let line of lines) {
-                // Skip very short lines or all-caps headers
-                if (line.length < 3 || (line === line.toUpperCase() && line.length < 15)) {
-                    continue;
-                }
-                
-                // Clean up
-                line = line.replace(/[|]/g, '').trim();
-                
-                if (line.length >= 3) {
-                    items.push(line);
-                }
-            }
-
-            return items;
-        }
-
         function saveToStorage() {
             try {
                 localStorage.setItem('flightChecklists', JSON.stringify(savedChecklists));
             } catch (e) {
-                console.log('Could not save to localStorage');
+                debug('Could not save to localStorage');
             }
         }
 
@@ -578,7 +621,7 @@
                     <div class="item-text">${item.text}</div>
                 `;
                 
-                li.addEventListener('click', () => {
+                li.addEventListener('click', function() {
                     currentChecklist[index].checked = !currentChecklist[index].checked;
                     li.classList.toggle('checked');
                 });
@@ -637,7 +680,7 @@
             }
         };
 
-        resetButton.addEventListener('click', () => {
+        resetButton.addEventListener('click', function() {
             if (confirm('Reset all checklist items?')) {
                 currentChecklist.forEach(item => item.checked = false);
                 displayChecklist();
@@ -646,6 +689,7 @@
 
         // Initialize
         emptyState.style.display = 'block';
+        debug('App loaded successfully');
     </script>
 </body>
 </html>
