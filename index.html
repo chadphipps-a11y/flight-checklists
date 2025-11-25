@@ -398,7 +398,7 @@
 
     <script>
         // Configuration
-        const GOOGLE_API_KEY = ' AIzaSyDe4UzT8RJ7205RvyBTVwlZYEuIxwlENTg';
+        const GOOGLE_API_KEY = 'AIzaSyDe4UzT8RJ7205RvyBTVwlZYEuIxwlENTg';
 
         // DOM elements
         const cameraInput = document.getElementById('cameraInput');
@@ -445,109 +445,46 @@
 
             const items = [];
             
-            // Headers to skip
-            const skipHeaders = [
+            // Exact headers to skip (must match exactly)
+            const skipExact = [
                 'TAKEOFF', 'LANDING', 'NORMAL TAKEOFF', 'NORMAL LANDING',
                 'SHORT FIELD TAKEOFF', 'SHORT FIELD LANDING', 
                 'SOFT FIELD TAKEOFF', 'SOFT FIELD LANDING',
-                'BALKED LANDING', 'GO-AROUND', 'GO AROUND', 'PRE-FLIGHT', 'PREFLIGHT',
-                'ENGINE START', 'BEFORE TAKEOFF', 'CRUISE', 'DESCENT',
-                'BEFORE LANDING', 'AFTER LANDING', 'SHUTDOWN', 'EMERGENCY',
-                'CESSNA', 'PILOT', 'OPERATING', 'HANDBOOK'
+                'BALKED LANDING (GO-AROUND)', 'BALKED LANDING', '(GO-AROUND)'
             ];
             
-            let i = 0;
-            while (i < lines.length) {
-                let line = lines[i].trim();
-                
-                // Skip empty or very short lines
-                if (line.length < 3) {
-                    i++;
+            for (let line of lines) {
+                // Skip exact header matches
+                if (skipExact.includes(line.toUpperCase().trim())) {
                     continue;
                 }
                 
-                // Skip section headers
-                const upperLine = line.toUpperCase();
-                let isHeader = false;
-                for (let header of skipHeaders) {
-                    if (upperLine === header) {
-                        isHeader = true;
-                        break;
-                    }
-                }
-                if (isHeader) {
-                    i++;
+                // Skip very short lines or just numbers/periods
+                if (line.length < 3 || line.match(/^[\d\.\s]+$/)) {
                     continue;
                 }
                 
                 // Clean up
                 line = line.replace(/[|]/g, '').trim();
                 
-                // Check if this looks like the start of a checklist item
-                // (has aviation-related words or ends with dots/colons)
-                const isChecklistStart = 
-                    line.match(/(Wing Flaps?|Throttle|Mixture|Airspeed|Altitude|Engine|Gear|Brake|Brakes|Elevator|Rudder|Trim|Fuel|Oil|Lights?|Switches?|Radios?|Altimeter|Mags?|Primer|Carb|Controls?|Speed|Roll|Flare|Power|Liftoff|Climb|Descent|Touchdown|Landing|Takeoff)/i) ||
-                    line.match(/\.{2,}\s*$/) ||
-                    line.match(/:$/);
-                
-                if (isChecklistStart) {
-                    // Look ahead to see if the next line(s) contain the action
-                    let fullItem = line;
-                    let j = i + 1;
-                    
-                    // Combine with next line(s) if they look like actions or continuations
-                    while (j < lines.length && j < i + 3) { // Look ahead max 2 lines
-                        let nextLine = lines[j].trim();
-                        
-                        // Stop if we hit another checklist item or header
-                        if (nextLine.match(/^(Wing Flaps?|Throttle|Mixture|Airspeed|Elevator|Gear|Brake|Climb|Landing|Takeoff)/i)) {
-                            break;
-                        }
-                        
-                        // Stop if we hit a section header
-                        let isNextHeader = false;
-                        for (let header of skipHeaders) {
-                            if (nextLine.toUpperCase() === header) {
-                                isNextHeader = true;
-                                break;
-                            }
-                        }
-                        if (isNextHeader) break;
-                        
-                        // If next line has useful content, add it
-                        if (nextLine.length > 2 && 
-                            (nextLine.match(/[A-Z]{2,}/) || // Has uppercase words (actions)
-                             nextLine.match(/\d+/) ||        // Has numbers
-                             nextLine.match(/°/) ||          // Has degree symbol
-                             nextLine.includes('KIAS') ||
-                             nextLine.includes('RPM') ||
-                             nextLine.includes('FT'))) {
-                            
-                            // Add spacing if needed
-                            if (!fullItem.endsWith('.') && !fullItem.endsWith(':')) {
-                                fullItem += ' ';
-                            }
-                            fullItem += nextLine;
-                            j++;
-                        } else {
-                            break;
-                        }
-                    }
-                    
-                    // Clean up the combined item
-                    fullItem = fullItem.replace(/\.{2,}/g, '...').trim();
-                    
-                    // Only add if it has substance
-                    if (fullItem.length > 5) {
-                        items.push(fullItem);
-                    }
-                    
-                    i = j; // Skip the lines we combined
-                } else {
-                    i++;
+                // Keep anything that looks like a checklist item:
+                // - Has dots (checklist format)
+                // - Has aviation terms
+                // - Has values (KIAS, RPM, etc.)
+                // - Has action words
+                if (
+                    line.includes('...') ||
+                    line.includes('..') ||
+                    line.match(/\d+.*KIAS/i) ||
+                    line.match(/\d+.*RPM/i) ||
+                    line.match(/\d+.*°/) ||
+                    line.match(/(Wing|Flap|Throttle|Mixture|Airspeed|Elevator|Gear|Brake|Fuel|Oil|Engine|Power|Climb|Speed|Roll|Touchdown|Landing|Takeoff)/i) ||
+                    line.match(/(SET|FULL|OPEN|CLOSED|CHECK|APPLY|RELEASE|LOWER|RAISE|RETRACT|AS DESIRED|MINIMUM|REQUIRED|FIRST|GENTLY)/i)
+                ) {
+                    items.push(line);
                 }
             }
-
+            
             return items;
         }
 
