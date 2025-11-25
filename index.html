@@ -344,11 +344,11 @@
         <div class="content">
             <div class="instructions">
                 <h3>📋 How to Use:</h3>
-                <ul>
-                    <li>Tap "Scan Checklist" to photograph your checklist</li>
-                    <li>App converts image to PDF automatically</li>
-                    <li>Extracts text from PDF (better accuracy!)</li>
-                    <li>Name and save your checklist</li>
+<ul>
+                    <li><strong>Step 1:</strong> Take photo of checklist with Camera app</li>
+                    <li><strong>Step 2:</strong> Open Photos → Share → "Save to Files" or "Create PDF"</li>
+                    <li><strong>Step 3:</strong> Tap "Upload PDF" below and select your PDF</li>
+                    <li><strong>Step 4:</strong> App extracts text perfectly and creates checklist!</li>
                 </ul>
             </div>
 
@@ -358,8 +358,8 @@
             </div>
 
             <div class="scan-section">
-                <input type="file" id="cameraInput" class="camera-input" accept="image/*" capture="environment">
-                <button id="scanButton" class="scan-button">📷 Scan Checklist</button>
+                <input type="file" id="cameraInput" class="camera-input" accept="application/pdf">
+                <button id="scanButton" class="scan-button">📄 Upload PDF Checklist</button>
                 <div id="debugInfo" class="debug-info" style="display:block;"></div>
             </div>
 
@@ -552,37 +552,44 @@
         scanButton.addEventListener('click', () => cameraInput.click());
         newChecklistBtn.addEventListener('click', () => cameraInput.click());
 
-        // Main camera input handler
+        // Main PDF input handler
         cameraInput.addEventListener('change', async function(e) {
             const file = e.target.files[0];
             if (!file) return;
 
             debug('File selected: ' + file.name + ' (' + file.size + ' bytes)');
+            debug('File type: ' + file.type);
 
-            // Show preview
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                previewImage.src = e.target.result;
-                previewSection.style.display = 'block';
-            };
-            reader.readAsDataURL(file);
+            // Verify it's a PDF
+            if (file.type !== 'application/pdf') {
+                alert('Please upload a PDF file. Take a photo, then use Share → Create PDF in Photos app.');
+                return;
+            }
 
             // Hide sections
             emptyState.style.display = 'none';
             checklistSection.style.display = 'none';
+            previewSection.style.display = 'none';
             processingSection.style.display = 'block';
             scanButton.disabled = true;
 
             try {
-                // Step 1: Convert image to PDF
-                debug('Converting image to PDF...');
-                const pdfDataUrl = await imageToPDF(file);
+                // Convert PDF file to data URL
+                debug('Reading PDF file...');
+                const pdfDataUrl = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => resolve(e.target.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
                 
-                // Step 2: Extract text from PDF
+                // Extract text from PDF
                 debug('Extracting text from PDF...');
                 const text = await extractTextFromPDF(pdfDataUrl);
                 
-                // Step 3: Parse checklist items
+                debug('Raw text extracted:\n' + text.substring(0, 500) + '...');
+                
+                // Parse checklist items
                 const items = parseChecklistItems(text);
                 
                 if (items.length > 0) {
@@ -611,13 +618,13 @@
                         emptyState.style.display = 'block';
                     }
                 } else {
-                    alert('No checklist items found.');
+                    alert('No checklist items found in PDF.');
                     emptyState.style.display = 'block';
                 }
             } catch (error) {
                 debug('ERROR: ' + error.message);
                 console.error(error);
-                alert('Error processing checklist: ' + error.message);
+                alert('Error processing PDF: ' + error.message);
                 emptyState.style.display = 'block';
             } finally {
                 processingSection.style.display = 'none';
