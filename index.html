@@ -445,12 +445,48 @@
 
             const items = [];
             
+            // Headers to skip (common checklist section names)
+            const skipHeaders = [
+                'TAKEOFF', 'LANDING', 'NORMAL TAKEOFF', 'NORMAL LANDING',
+                'SHORT FIELD TAKEOFF', 'SHORT FIELD LANDING', 
+                'SOFT FIELD TAKEOFF', 'SOFT FIELD LANDING',
+                'BALKED LANDING', 'GO-AROUND', 'PRE-FLIGHT', 'PREFLIGHT',
+                'ENGINE START', 'BEFORE TAKEOFF', 'CRUISE', 'DESCENT',
+                'BEFORE LANDING', 'AFTER LANDING', 'SHUTDOWN', 'EMERGENCY'
+            ];
+            
             for (let line of lines) {
-                if (line.length < 3 || (line === line.toUpperCase() && line.length < 15)) {
+                // Skip very short lines
+                if (line.length < 5) continue;
+                
+                // Skip section headers
+                const upperLine = line.toUpperCase();
+                let isHeader = false;
+                for (let header of skipHeaders) {
+                    if (upperLine === header || upperLine.includes(header)) {
+                        isHeader = true;
+                        break;
+                    }
+                }
+                if (isHeader) continue;
+                
+                // Skip lines that are just numbers or single words
+                if (line.match(/^\d+\.?$/) || line.split(/\s+/).length === 1) {
                     continue;
                 }
+                
+                // Clean up the line
                 line = line.replace(/[|]/g, '').trim();
-                if (line.length >= 3) {
+                
+                // Look for checklist patterns (item...action or item:action or item-action)
+                // These are valid checklist items
+                if (line.includes('...') || line.includes('..') || 
+                    line.match(/\w+\s*[:\.]\s*[A-Z]/) ||
+                    line.match(/\d+\s*(KIAS|RPM|FT|FEET|DEGREES|°)/i)) {
+                    items.push(line);
+                }
+                // Also include lines with specific aviation terms
+                else if (line.match(/(flaps?|throttle|mixture|airspeed|altitude|engine|gear|brake|elevator|rudder|ailerons?|trim|fuel|oil|lights?|switches?|radios?|altimeter|compass|mags?|magnetos?|primer|carb|carburetor)/i)) {
                     items.push(line);
                 }
             }
